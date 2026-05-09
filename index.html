@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CineVault | Premium Movie Tracker</title>
+    <meta name="description" content="Discover movies, read details, and manage your personal watchlist.">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Phosphor Icons for modern scalable icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <i class="ph-fill ph-film-strip"></i>
+            <span>CineVault</span>
+        </div>
+        <div class="nav-links">
+            <button class="nav-btn active" data-target="search-view">
+                <i class="ph ph-magnifying-glass"></i> Search
+            </button>
+            <button class="nav-btn" data-target="watchlist-view">
+                <i class="ph ph-bookmark-simple"></i> Watchlist
+            </button>
+        </div>
+    </nav>
+
+    <main class="app-container">
+        
+        <!-- SEARCH VIEW -->
+        <section id="search-view" class="view-section active">
+            <div class="search-header">
+                <h1>Discover Movies & TV</h1>
+                <p>Find your next favorite story using the OMDb database.</p>
+                
+                <div class="search-controls">
+                    <div class="search-bar">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="search-input" placeholder="Search by title (e.g. Inception)..." autocomplete="off">
+                    </div>
+                    <div class="filters">
+                        <select id="type-filter">
+                            <option value="">All Types</option>
+                            <option value="movie">Movies</option>
+                            <option value="series">Series</option>
+                            <option value="episode">Episodes</option>
+                        </select>
+                        <select id="sort-filter">
+                            <option value="">Default Sort</option>
+                            <option value="year-desc">Year (Newest)</option>
+                            <option value="year-asc">Year (Oldest)</option>
+                            <option value="title-asc">Title (A-Z)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="search-results" class="movie-grid">
+                <!-- Search results injected here -->
+            </div>
+            
+            <div id="search-loading" class="loading-state hidden">
+                <div class="spinner"></div>
+                <p>Searching...</p>
+            </div>
+            
+            <div id="search-empty" class="empty-state">
+                <i class="ph-duotone ph-popcorn"></i>
+                <h3>Ready to explore</h3>
+                <p>Start typing above to search for movies, series, or episodes.</p>
+            </div>
+            
+            <button id="load-more-btn" class="btn primary hidden">Load More Results</button>
+        </section>
+
+        <!-- MOVIE DETAIL VIEW -->
+        <section id="detail-view" class="view-section hidden">
+            <button class="btn-back" id="back-to-search">
+                <i class="ph ph-arrow-left"></i> Back
+            </button>
+            
+            <div id="detail-content" class="detail-container">
+                <!-- Details injected here -->
+            </div>
+        </section>
+
+        <!-- WATCHLIST VIEW -->
+        <section id="watchlist-view" class="view-section hidden">
+            <div class="watchlist-header">
+                <div class="watchlist-title-area">
+                    <h1>My Watchlist</h1>
+                    <button id="export-watchlist" class="btn secondary">
+                        <i class="ph ph-download-simple"></i> Export JSON
+                    </button>
+                </div>
+                
+                <div class="stats-dashboard" id="stats-dashboard">
+                    <!-- Stats injected here -->
+                </div>
+
+                <div class="watchlist-controls">
+                    <div class="filters">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="watched">Watched</button>
+                        <button class="filter-btn" data-filter="unwatched">Unwatched</button>
+                        <button class="filter-btn" data-filter="favorites"><i class="ph-fill ph-heart"></i> Favourites</button>
+                    </div>
+                    <select id="watchlist-sort">
+                        <option value="date-desc">Date Added (Newest)</option>
+                        <option value="date-asc">Date Added (Oldest)</option>
+                        <option value="title-asc">Title (A-Z)</option>
+                        <option value="rating-desc">My Rating (High-Low)</option>
+                        <option value="imdb-desc">IMDb Rating (High-Low)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="watchlist-grid" class="movie-grid">
+                <!-- Watchlist items injected here -->
+            </div>
+            
+            <div id="watchlist-empty" class="empty-state hidden">
+                <i class="ph-duotone ph-bookmark-simple"></i>
+                <h3>Your watchlist is empty</h3>
+                <p>Save movies and series you want to keep track of.</p>
+                <button class="btn primary" id="go-to-search-btn">Discover Movies</button>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
