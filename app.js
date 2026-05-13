@@ -1,21 +1,42 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 const API_KEY = '92e5e6a1';
 const API_URL = 'https://www.omdbapi.com/';
 
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCS11IxswufbX5H5ZR5PuzUEGLxk2hUsc8",
+  authDomain: "rating-a-movie.firebaseapp.com",
+  projectId: "rating-a-movie",
+  storageBucket: "rating-a-movie.firebasestorage.app",
+  messagingSenderId: "213170855970",
+  appId: "1:213170855970:web:1f62a4595f9446e597ea7b"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
 // State Management
 let state = {
+    user: null,
     currentView: 'search-view',
     searchResults: [],
     searchQuery: '',
     searchPage: 1,
     totalResults: 0,
     currentMovie: null,
-    watchlist: JSON.parse(localStorage.getItem('cinevault_watchlist')) || [],
+    watchlist: [],
     filters: {
         type: '',
         sort: ''
     },
     watchlistFilters: {
-        status: 'all', // all, watched, unwatched, favorites
+        status: 'all', 
         sort: 'date-desc'
     }
 };
@@ -38,11 +59,72 @@ const sortFilter = document.getElementById('sort-filter');
 const detailContent = document.getElementById('detail-content');
 const backBtn = document.getElementById('back-to-search');
 
+const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const userProfile = document.getElementById('user-profile');
+const userAvatar = document.getElementById('user-avatar');
+
 // Initialization
 function init() {
     setupEventListeners();
-    renderWatchlist(); // Pre-render to get stats
-    updateStats();
+    
+    // Auth State Observer
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            state.user = user;
+            loginBtn.classList.add('hidden');
+            userProfile.classList.remove('hidden');
+            userAvatar.src = user.photoURL || 'https://via.placeholder.com/32';
+            
+            // Listen to Firestore Watchlist
+            listenToWatchlist(user.uid);
+        } else {
+            state.user = null;
+            state.watchlist = JSON.parse(localStorage.getItem('cinevault_watchlist')) || [];
+            loginBtn.classList.remove('hidden');
+            userProfile.classList.add('hidden');
+            renderWatchlist();
+            updateStats();
+        }
+    });
+}
+
+function listenToWatchlist(uid) {
+    const watchlistRef = doc(db, 'watchlists', uid);
+    onSnapshot(watchlistRef, (docSnap) => {
+        if (docSnap.exists()) {
+            state.watchlist = docSnap.data().items || [];
+        } else {
+            state.watchlist = [];
+        }
+        renderWatchlist();
+        updateStats();
+        
+        // If we are looking at a movie detail, re-render to update the button state
+        if (state.currentMovie) {
+            renderMovieDetails(state.currentMovie);
+        }
+    });
+}
+
+// ==========================================
+// AUTH ACTIONS
+// ==========================================
+async function login() {
+    try {
+        await signInWithPopup(auth, provider);
+    } catch (error) {
+        console.error("Login failed:", error);
+        alert("Login failed. Please check if Google Sign-In is enabled in Firebase Console.");
+    }
+}
+
+async function logout() {
+    try {
+        await signOut(auth);
+    } catch (error) {
+        console.error("Logout failed:", error);
+    }
 }
 
 // ==========================================
@@ -51,13 +133,11 @@ function init() {
 function switchView(viewId) {
     state.currentView = viewId;
     
-    // Update Nav UI
     navBtns.forEach(btn => {
         if(btn.dataset.target === viewId) btn.classList.add('active');
         else btn.classList.remove('active');
     });
 
-    // Update Views
     Object.values(views).forEach(view => {
         view.classList.add('hidden');
         view.classList.remove('active');
@@ -65,7 +145,6 @@ function switchView(viewId) {
     
     const activeView = document.getElementById(viewId);
     activeView.classList.remove('hidden');
-    // small delay to allow display:block to apply before animating opacity
     setTimeout(() => activeView.classList.add('active'), 10);
 
     if (viewId === 'watchlist-view') {
@@ -94,7 +173,7 @@ function handleSearch(e) {
 
     debounceTimeout = setTimeout(() => {
         fetchMovies(true);
-    }, 500); // 500ms debounce
+    }, 500);
 }
 
 async function fetchMovies(isNewSearch = false) {
@@ -120,7 +199,6 @@ async function fetchMovies(isNewSearch = false) {
             let results = data.Search;
             state.totalResults = parseInt(data.totalResults);
             
-            // Client side sorting if requested
             if (state.filters.sort === 'year-desc') {
                 results.sort((a, b) => parseInt(b.Year) - parseInt(a.Year));
             } else if (state.filters.sort === 'year-asc') {
@@ -247,10 +325,10 @@ function renderMovieDetails(movie) {
                 </div>
                 
                 <div class="detail-actions">
-                    <button class="btn btn-trailer" onclick="openTrailer('${movie.Title.replace(/'/g, "\\'")}', '${movie.Year}')">
+                    <button class="btn btn-trailer" id="trailer-btn">
                         <i class="ph-fill ph-play-circle"></i> Watch Trailer
                     </button>
-                    <button id="toggle-watchlist-btn" class="btn ${isSaved ? 'saved' : 'primary'} btn-watchlist-toggle" onclick="toggleWatchlist()">
+                    <button id="toggle-watchlist-btn" class="btn ${isSaved ? 'saved' : 'primary'} btn-watchlist-toggle">
                         <i class="ph-fill ${isSaved ? 'ph-check' : 'ph-plus'}"></i> 
                         ${isSaved ? 'Saved to Watchlist' : 'Add to Watchlist'}
                     </button>
@@ -259,7 +337,6 @@ function renderMovieDetails(movie) {
         </div>
     `;
 
-    // Personal Review Section (Only show if saved)
     if (isSaved) {
         html += renderPersonalReviewSection(savedData);
     }
@@ -275,9 +352,15 @@ function renderMovieDetails(movie) {
 
     detailContent.innerHTML = html;
     
+    // Attach event listeners to the newly injected buttons
+    document.getElementById('trailer-btn').onclick = () => openTrailer(movie.Title, movie.Year);
+    document.getElementById('toggle-watchlist-btn').onclick = () => toggleWatchlist();
+    
     if (isSaved) {
         setupStarRating();
     }
+    
+    fetchSimilarMovies(movie.Genre);
 }
 
 function openTrailer(title, year) {
@@ -286,23 +369,23 @@ function openTrailer(title, year) {
 }
 
 async function fetchSimilarMovies(genreString) {
+    const grid = document.getElementById('similar-grid');
+    if (!grid) return;
+
     if (!genreString || genreString === "N/A") {
-        document.getElementById('similar-grid').innerHTML = "<p>No similar movies found.</p>";
+        grid.innerHTML = "<p>No similar movies found.</p>";
         return;
     }
     
-    // Pick the first genre
     const primaryGenre = genreString.split(',')[0].trim();
     
     try {
         const res = await fetch(`${API_URL}?apikey=${API_KEY}&s=${encodeURIComponent(primaryGenre)}&type=movie&page=1`);
         const data = await res.json();
         
-        const grid = document.getElementById('similar-grid');
         grid.innerHTML = '';
         
         if (data.Response === "True") {
-            // Filter out current movie and show top 5
             const similar = data.Search.filter(m => m.imdbID !== state.currentMovie.imdbID).slice(0, 6);
             
             if (similar.length === 0) {
@@ -325,7 +408,7 @@ async function fetchSimilarMovies(genreString) {
              grid.innerHTML = "<p>No similar movies found.</p>";
         }
     } catch (e) {
-         document.getElementById('similar-grid').innerHTML = "<p>Failed to load similar movies.</p>";
+         grid.innerHTML = "<p>Failed to load similar movies.</p>";
     }
 }
 
@@ -337,10 +420,8 @@ function toggleWatchlist() {
     const index = state.watchlist.findIndex(m => m.imdbID === movie.imdbID);
     
     if (index > -1) {
-        // Remove
         state.watchlist.splice(index, 1);
     } else {
-        // Add
         state.watchlist.push({
             ...movie,
             addedAt: new Date().toISOString(),
@@ -353,11 +434,16 @@ function toggleWatchlist() {
     }
     
     saveWatchlist();
-    renderMovieDetails(state.currentMovie); // re-render to show review section or update button
+    renderMovieDetails(state.currentMovie);
 }
 
-function saveWatchlist() {
-    localStorage.setItem('cinevault_watchlist', JSON.stringify(state.watchlist));
+async function saveWatchlist() {
+    if (state.user) {
+        const watchlistRef = doc(db, 'watchlists', state.user.uid);
+        await setDoc(watchlistRef, { items: state.watchlist });
+    } else {
+        localStorage.setItem('cinevault_watchlist', JSON.stringify(state.watchlist));
+    }
     updateStats();
 }
 
@@ -372,10 +458,10 @@ function renderPersonalReviewSection(data) {
             <div class="review-header">
                 <h2>My Review</h2>
                 <div class="watchlist-toggles">
-                    <button class="btn ${data.watched ? 'saved' : 'secondary'}" onclick="updateMovieData('${data.imdbID}', 'watched', ${!data.watched})">
+                    <button id="mark-watched-btn" class="btn ${data.watched ? 'saved' : 'secondary'}">
                         <i class="ph-fill ph-check-circle"></i> ${data.watched ? 'Watched' : 'Mark Watched'}
                     </button>
-                    <button class="btn ${data.favorite ? 'saved' : 'secondary'}" onclick="updateMovieData('${data.imdbID}', 'favorite', ${!data.favorite})">
+                    <button id="mark-favorite-btn" class="btn ${data.favorite ? 'saved' : 'secondary'}">
                         <i class="ph-fill ph-heart"></i> ${data.favorite ? 'Favorited' : 'Favorite'}
                     </button>
                 </div>
@@ -391,7 +477,7 @@ function renderPersonalReviewSection(data) {
                 
                 <div>
                     <label style="color: var(--text-secondary); display:block; margin-bottom:0.5rem;">Notes / Review</label>
-                    <textarea id="personal-review-text" onchange="updateMovieData('${data.imdbID}', 'review', this.value)" placeholder="Write your thoughts here...">${data.review || ''}</textarea>
+                    <textarea id="personal-review-text" placeholder="Write your thoughts here...">${data.review || ''}</textarea>
                 </div>
             </div>
         </div>
@@ -407,13 +493,22 @@ function setupStarRating() {
         star.onclick = function() {
             const rating = parseInt(this.dataset.rating);
             updateMovieData(state.currentMovie.imdbID, 'personalRating', rating);
-            // Update UI instantly
-            stars.forEach(s => {
-                if (parseInt(s.dataset.rating) <= rating) s.classList.add('active');
-                else s.classList.remove('active');
-            });
         };
     });
+
+    document.getElementById('mark-watched-btn').onclick = () => {
+        const movie = state.watchlist.find(m => m.imdbID === state.currentMovie.imdbID);
+        updateMovieData(state.currentMovie.imdbID, 'watched', !movie.watched);
+    };
+
+    document.getElementById('mark-favorite-btn').onclick = () => {
+        const movie = state.watchlist.find(m => m.imdbID === state.currentMovie.imdbID);
+        updateMovieData(state.currentMovie.imdbID, 'favorite', !movie.favorite);
+    };
+
+    document.getElementById('personal-review-text').onchange = (e) => {
+        updateMovieData(state.currentMovie.imdbID, 'review', e.target.value);
+    };
 }
 
 function updateMovieData(id, key, value) {
@@ -421,8 +516,7 @@ function updateMovieData(id, key, value) {
     if (index > -1) {
         state.watchlist[index][key] = value;
         saveWatchlist();
-        // If toggling watched/favorite, re-render to update button styles
-        if(key === 'watched' || key === 'favorite') {
+        if(key === 'watched' || key === 'favorite' || key === 'personalRating') {
              renderMovieDetails(state.currentMovie);
         }
     }
@@ -434,11 +528,11 @@ function updateMovieData(id, key, value) {
 function renderWatchlist() {
     const grid = document.getElementById('watchlist-grid');
     const empty = document.getElementById('watchlist-empty');
+    if (!grid) return;
     grid.innerHTML = '';
     
     let filteredList = [...state.watchlist];
     
-    // Apply Status Filter
     if (state.watchlistFilters.status === 'watched') {
         filteredList = filteredList.filter(m => m.watched);
     } else if (state.watchlistFilters.status === 'unwatched') {
@@ -447,7 +541,6 @@ function renderWatchlist() {
         filteredList = filteredList.filter(m => m.favorite);
     }
     
-    // Apply Sort
     filteredList.sort((a, b) => {
         const sort = state.watchlistFilters.sort;
         if (sort === 'date-desc') return new Date(b.addedAt) - new Date(a.addedAt);
@@ -469,12 +562,10 @@ function renderWatchlist() {
             
             const posterUrl = movie.Poster !== "N/A" ? movie.Poster : 'https://via.placeholder.com/300x450?text=No+Poster';
             
-            // Badges
             let badges = '';
             if(movie.watched) badges += `<div class="badge-watched"><i class="ph-bold ph-check"></i></div>`;
             if(movie.favorite) badges += `<div class="badge-favorite"><i class="ph-fill ph-heart"></i></div>`;
             
-            // Stars HTML
             let starsHtml = '';
             if (movie.personalRating > 0) {
                 starsHtml = `<div class="card-personal-rating">
@@ -505,13 +596,10 @@ function updateStats() {
     const list = state.watchlist;
     const total = list.length;
     const watched = list.filter(m => m.watched).length;
-    const unwatched = total - watched;
     
-    // Average Rating
     const ratedMovies = list.filter(m => m.personalRating > 0);
     const avgRating = ratedMovies.length ? (ratedMovies.reduce((sum, m) => sum + m.personalRating, 0) / ratedMovies.length).toFixed(1) : '0';
     
-    // Total Runtime
     let runtimeMins = 0;
     list.filter(m => m.watched).forEach(m => {
         const match = m.Runtime.match(/\d+/);
@@ -521,24 +609,27 @@ function updateStats() {
     const mins = runtimeMins % 60;
     const runtimeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
 
-    document.getElementById('stats-dashboard').innerHTML = `
-        <div class="stat-card">
-            <div class="value">${total}</div>
-            <div style="color:var(--text-secondary); font-size:0.85rem">Total Saved</div>
-        </div>
-        <div class="stat-card">
-            <div class="value">${watched}</div>
-            <div style="color:var(--text-secondary); font-size:0.85rem">Watched</div>
-        </div>
-        <div class="stat-card">
-            <div class="value">${avgRating}</div>
-            <div style="color:var(--text-secondary); font-size:0.85rem">Avg Rating</div>
-        </div>
-        <div class="stat-card">
-            <div class="value">${runtimeStr}</div>
-            <div style="color:var(--text-secondary); font-size:0.85rem">Watched Time</div>
-        </div>
-    `;
+    const dashboard = document.getElementById('stats-dashboard');
+    if (dashboard) {
+        dashboard.innerHTML = `
+            <div class="stat-card">
+                <div class="value">${total}</div>
+                <div style="color:var(--text-secondary); font-size:0.85rem">Total Saved</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">${watched}</div>
+                <div style="color:var(--text-secondary); font-size:0.85rem">Watched</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">${avgRating}</div>
+                <div style="color:var(--text-secondary); font-size:0.85rem">Avg Rating</div>
+            </div>
+            <div class="stat-card">
+                <div class="value">${runtimeStr}</div>
+                <div style="color:var(--text-secondary); font-size:0.85rem">Watched Time</div>
+            </div>
+        `;
+    }
 }
 
 function exportWatchlist() {
@@ -546,7 +637,7 @@ function exportWatchlist() {
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href",     dataStr);
     downloadAnchorNode.setAttribute("download", "cinevault_watchlist.json");
-    document.body.appendChild(downloadAnchorNode); // required for firefox
+    document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
 }
@@ -555,7 +646,9 @@ function exportWatchlist() {
 // EVENT LISTENERS SETUP
 // ==========================================
 function setupEventListeners() {
-    // Navigation
+    loginBtn.onclick = login;
+    logoutBtn.onclick = logout;
+
     navBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const target = e.currentTarget.dataset.target;
@@ -563,7 +656,6 @@ function setupEventListeners() {
         });
     });
 
-    // Search
     searchInput.addEventListener('input', handleSearch);
     typeFilter.addEventListener('change', (e) => {
         state.filters.type = e.target.value;
@@ -571,24 +663,19 @@ function setupEventListeners() {
     });
     sortFilter.addEventListener('change', (e) => {
         state.filters.sort = e.target.value;
-        if(state.searchQuery) {
-            // Sort locally without fetching if possible
-            fetchMovies(true);
-        }
+        if(state.searchQuery) fetchMovies(true);
     });
     loadMoreBtn.addEventListener('click', () => {
         state.searchPage++;
         fetchMovies();
     });
 
-    // Detail View
     backBtn.addEventListener('click', () => {
         switchView('search-view');
-        // Clear current movie? Optional.
     });
 
-    // Watchlist Controls
-    document.getElementById('go-to-search-btn').addEventListener('click', () => switchView('search-view'));
+    const discoverBtn = document.getElementById('go-to-search-btn');
+    if (discoverBtn) discoverBtn.onclick = () => switchView('search-view');
     
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -599,13 +686,22 @@ function setupEventListeners() {
         });
     });
 
-    document.getElementById('watchlist-sort').addEventListener('change', (e) => {
-        state.watchlistFilters.sort = e.target.value;
-        renderWatchlist();
-    });
+    const watchlistSort = document.getElementById('watchlist-sort');
+    if (watchlistSort) {
+        watchlistSort.addEventListener('change', (e) => {
+            state.watchlistFilters.sort = e.target.value;
+            renderWatchlist();
+        });
+    }
 
-    document.getElementById('export-watchlist').addEventListener('click', exportWatchlist);
+    const exportBtn = document.getElementById('export-watchlist');
+    if (exportBtn) exportBtn.onclick = exportWatchlist;
 }
+
+// Global scope attachments for HTML onclick (if any remain)
+window.fetchMovieDetails = fetchMovieDetails;
+window.toggleWatchlist = toggleWatchlist;
+window.openTrailer = openTrailer;
 
 // Start
 init();

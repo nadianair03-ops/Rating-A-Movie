@@ -24,6 +24,17 @@
                 <i class="ph ph-bookmark-simple"></i> Watchlist
             </button>
         </div>
+        <div class="nav-auth" id="auth-section">
+            <button id="login-btn" class="btn primary btn-sm">
+                <i class="ph ph-google-logo"></i> Login
+            </button>
+            <div id="user-profile" class="hidden">
+                <img id="user-avatar" src="" alt="User">
+                <button id="logout-btn" title="Logout">
+                    <i class="ph ph-sign-out"></i>
+                </button>
+            </div>
+        </div>
     </nav>
 
     <main class="app-container">
@@ -130,6 +141,6 @@
 
     </main>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
